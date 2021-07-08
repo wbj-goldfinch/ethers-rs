@@ -149,66 +149,20 @@ mod tests {
     #[test]
     fn encodes_abi_v2() {
         // taken from dbg.js
-        let expected = "af5e556c07128a7f1ae85cb4496af0da0293cf89ba0a90f253221d888b11d241d1cf60972dbc9b33499677addefeeb4abca51c4eed331eeb7e863b877793ebe5a92967eb1ef9ea2a49cedb5e34284a9c4474d637422fbfd363df7188260f5545aa13ede31f970091dd46eb7252661cf020521ee259de4d6180ec73d85bc7a3abf44734460c401543650fa5dc846c1fad4469f0cbc1b662f66d7f32c7fcd663abd6b19bba1e6572cc4e727576d8c98afb7f9d8e0ea6d7472216fde4f6899bde48126eeae21fb23628d29e6b7dc746141388c627f9e763d41a8b4639f7568338a9e3a7f71b22d96057abae697072c991abd309ae41f2588b9a0df1b864c5eb440a6674672c000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000012100000000000000000000000000000000000000000000000000000000000000";
+        let expected = "2e246c44000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000005";
 
-        let abi = r#"[{"inputs":[{"components":[{"internalType":"uint256","name":"X","type":"uint256"},{"internalType":"uint256","name":"Y","type":"uint256"}],"internalType":"struct Pairing.G1Point","name":"alpha1","type":"tuple"},{"components":[{"internalType":"uint256[2]","name":"X","type":"uint256[2]"},{"internalType":"uint256[2]","name":"Y","type":"uint256[2]"}],"internalType":"struct Pairing.G2Point","name":"beta2","type":"tuple"},{"components":[{"internalType":"uint256[2]","name":"X","type":"uint256[2]"},{"internalType":"uint256[2]","name":"Y","type":"uint256[2]"}],"internalType":"struct Pairing.G2Point","name":"gamma2","type":"tuple"},{"components":[{"internalType":"uint256[2]","name":"X","type":"uint256[2]"},{"internalType":"uint256[2]","name":"Y","type":"uint256[2]"}],"internalType":"struct Pairing.G2Point","name":"delta2","type":"tuple"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"components":[{"components":[{"internalType":"uint256","name":"X","type":"uint256"},{"internalType":"uint256","name":"Y","type":"uint256"}],"internalType":"struct Pairing.G1Point","name":"A","type":"tuple"},{"components":[{"internalType":"uint256[2]","name":"X","type":"uint256[2]"},{"internalType":"uint256[2]","name":"Y","type":"uint256[2]"}],"internalType":"struct Pairing.G2Point","name":"B","type":"tuple"},{"components":[{"internalType":"uint256","name":"X","type":"uint256"},{"internalType":"uint256","name":"Y","type":"uint256"}],"internalType":"struct Pairing.G1Point","name":"C","type":"tuple"}],"internalType":"struct Verifier.Proof","name":"","type":"tuple"},{"internalType":"uint256[]","name":"","type":"uint256[]"}],"name":"myVerify","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"pure","type":"function"}]"#;
-
-        // g1
-        let a = (
-            U256::from_dec_str(
-                "3198949054991667280165387084635600597227927865026280974964987118907363909783",
-            )
-            .unwrap(),
-            U256::from_dec_str(
-                "20687316587816052322568856512175379916584501800508271344391992766752732309483",
-            )
-            .unwrap(),
-        );
+        let abi = std::fs::read_to_string("./abi.json").unwrap();
 
         // g2
         let b = (
-            [
-                U256::from_dec_str(
-                    "14010946525363611648783965021539014007086080755179233678304950458716700012003",
-                )
-                .unwrap(),
-                U256::from_dec_str(
-                    "14288496145358251946737569813676839799632418165244761628157996564732870865990",
-                )
-                .unwrap(),
-            ],
-            [
-                U256::from_dec_str(
-                    "5540979148777701188106525011422898573472769630054493805938775026195596680122",
-                )
-                .unwrap(),
-                U256::from_dec_str(
-                    "13748629318214707079285830103609567267062645952182974563690706202913105963746",
-                )
-                .unwrap(),
-            ],
-        );
-
-        // g1
-        let c = (
-            U256::from_dec_str(
-                "14336570878493155239014816646593727250360001480347538979638914553463374870299",
-            )
-            .unwrap(),
-            U256::from_dec_str(
-                "15762707596132769298353224166019448246283617917341112120154135659113140741932",
-            )
-            .unwrap(),
+            [U256::from(1), U256::from(2)],
+            [U256::from(3), U256::from(4)],
         );
 
         // f
-        let inputs = vec![U256::from_dec_str(
-            "14926324003247790816319697286276175621710583960805228958211329188520051867648",
-        )
-        .unwrap()];
+        let inputs = vec![U256::from(5)];
 
-        let proof = (a, b, c);
-        let args = (proof, inputs);
+        let args = (b, inputs);
 
         let iface = BaseContract::from(serde_json::from_str::<Abi>(&abi).unwrap());
         let encoded = iface.encode("myVerify", args).unwrap();

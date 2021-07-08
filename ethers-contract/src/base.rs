@@ -150,7 +150,10 @@ pub(crate) fn decode_event<D: Detokenize>(
 /// Helper for ABI encoding arguments for a specific function
 pub fn encode_function_data<T: Tokenize>(function: &Function, args: T) -> Result<Bytes, AbiError> {
     let tokens = args.into_tokens();
-    Ok(function.encode_input(&tokens).map(Into::into)?)
+    dbg!(&function, &tokens);
+    let encoded = function.encode_input(&tokens).map(Into::into)?;
+    dbg!(&encoded);
+    Ok(encoded)
 }
 
 /// Helper for ABI decoding raw data based on a function's input or output.
