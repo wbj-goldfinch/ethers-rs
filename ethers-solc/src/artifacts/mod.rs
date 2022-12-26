@@ -9,7 +9,6 @@ use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     collections::{BTreeMap, HashSet},
     fmt, fs,
-    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -284,7 +283,7 @@ impl From<CompilerInput> for StandardJsonCompilerInput {
     }
 }
 
-#[derive(Clone, Debug, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     /// Stop compilation after the given stage.
@@ -498,37 +497,8 @@ impl Default for Settings {
     }
 }
 
-impl Hash for Settings {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.optimizer.enabled.hash(state);
-        self.optimizer.runs.hash(state);
-        if let Some(SettingsMetadata { bytecode_hash, cbor_metadata, .. }) = self.metadata {
-            (bytecode_hash.unwrap_or_default() as u8).hash(state);
-            cbor_metadata.hash(state);
-        }
-        self.output_selection.0.keys().cloned().collect::<String>().hash(state);
-        (self.evm_version.unwrap_or_default() as u8).hash(state);
-        self.via_ir.hash(state);
-        if let Some(DebuggingSettings { revert_strings, debug_info, .. }) = &self.debug {
-            (revert_strings.unwrap_or_default() as u8).hash(state);
-            debug_info.hash(state);
-        }
-    }
-}
-
-impl PartialEq for Settings {
-    fn eq(&self, other: &Self) -> bool {
-        self.optimizer == other.optimizer &&
-            self.metadata == other.metadata &&
-            self.output_selection == other.output_selection &&
-            self.evm_version == other.evm_version &&
-            self.via_ir == other.via_ir &&
-            self.debug == other.debug
-    }
-}
-
 /// A wrapper type for all libraries in the form of `<file>:<lib>:<addr>`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, Hash)]
 #[serde(transparent)]
 pub struct Libraries {
     /// All libraries, `(file path -> (Lib name -> Address))
@@ -621,7 +591,7 @@ impl AsMut<BTreeMap<PathBuf, BTreeMap<String, String>>> for Libraries {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Optimizer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
@@ -654,7 +624,7 @@ impl Default for Optimizer {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct OptimizerDetails {
     /// The peephole optimizer is always on if no details are given,
@@ -694,7 +664,7 @@ pub struct OptimizerDetails {
     pub yul_details: Option<YulDetails>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct YulDetails {
     /// Improve allocation of stack slots for variables, can free up stack slots early.
@@ -786,7 +756,7 @@ impl FromStr for EvmVersion {
 }
 
 /// Debugging settings for solc
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct DebuggingSettings {
     #[serde(
@@ -1034,7 +1004,7 @@ pub struct MetadataSource {
 }
 
 /// Model checker settings for solc
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct ModelCheckerSettings {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub contracts: BTreeMap<String, Vec<String>>,
@@ -1087,7 +1057,7 @@ impl FromStr for ModelCheckerEngine {
 }
 
 /// Which model checker targets to check.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum ModelCheckerTarget {
     Assert,
