@@ -5,6 +5,7 @@ pub mod artifacts;
 pub mod sourcemap;
 
 pub use artifacts::{CompilerInput, CompilerOutput, EvmVersion};
+use cache::CompilationUnitId;
 use std::collections::{BTreeMap, HashSet};
 
 mod artifact_output;
@@ -893,8 +894,8 @@ impl<T: ArtifactOutput> ArtifactOutput for Project<T> {
         T::output_file_name(name)
     }
 
-    fn output_file_name_versioned(name: impl AsRef<str>, version: &Version) -> PathBuf {
-        T::output_file_name_versioned(name, version)
+    fn output_file_name_versioned(name: impl AsRef<str>, unit_id: &CompilationUnitId,) -> PathBuf {
+        T::output_file_name_versioned(name, unit_id)
     }
 
     fn output_file(contract_file: impl AsRef<Path>, name: impl AsRef<str>) -> PathBuf {
@@ -904,9 +905,9 @@ impl<T: ArtifactOutput> ArtifactOutput for Project<T> {
     fn output_file_versioned(
         contract_file: impl AsRef<Path>,
         name: impl AsRef<str>,
-        version: &Version,
+        unit_id: &CompilationUnitId,
     ) -> PathBuf {
-        T::output_file_versioned(contract_file, name, version)
+        T::output_file_versioned(contract_file, name, unit_id)
     }
 
     fn contract_name(file: impl AsRef<Path>) -> Option<String> {

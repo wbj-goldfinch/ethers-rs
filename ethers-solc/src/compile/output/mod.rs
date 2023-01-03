@@ -3,12 +3,12 @@
 use crate::{
     artifacts::{
         contract::{CompactContractBytecode, CompactContractRef, Contract},
-        Error, Severity,
+        Error, Severity, Settings,
     },
     buildinfo::RawBuildInfo,
     info::ContractInfoRef,
     sources::{VersionedSourceFile, VersionedSourceFiles},
-    ArtifactId, ArtifactOutput, Artifacts, CompilerOutput, ConfigurableArtifacts, SolcIoError,
+    ArtifactId, ArtifactOutput, Artifacts, CompilerOutput, ConfigurableArtifacts, SolcIoError, cache::CompilationUnitId,
 };
 use contracts::{VersionedContract, VersionedContracts};
 use semver::Version;
@@ -99,13 +99,13 @@ impl<T: ArtifactOutput> ProjectCompileOutput<T> {
     /// let project = Project::builder().build().unwrap();
     /// let artifacts: BTreeMap<String, (&ConfigurableContractArtifact, &Version)> = project.compile().unwrap().versioned_artifacts().collect();
     /// ```
-    pub fn versioned_artifacts(&self) -> impl Iterator<Item = (String, (&T::Artifact, &Version))> {
+    pub fn versioned_artifacts(&self) -> impl Iterator<Item = (String, (&T::Artifact, &CompilationUnitId))> {
         self.cached_artifacts
             .artifact_files()
             .chain(self.compiled_artifacts.artifact_files())
             .filter_map(|artifact| {
                 T::contract_name(&artifact.file)
-                    .map(|name| (name, (&artifact.artifact, &artifact.version)))
+                    .map(|name| (name, (&artifact.artifact, &artifact.compilation_unit_id)))
             })
     }
 
@@ -475,28 +475,28 @@ impl AggregatedCompilerOutput {
 
     pub fn extend_all<I>(&mut self, out: I)
     where
-        I: IntoIterator<Item = (Version, CompilerOutput)>,
+        I: IntoIterator<Item = (Settings, Version, CompilerOutput)>,
     {
-        for (v, o) in out {
-            self.extend(v, o)
+        for (s, v, o) in out {
+            self.extend(s, v, o)
         }
     }
 
     /// adds a new `CompilerOutput` to the aggregated output
-    pub fn extend(&mut self, version: Version, output: CompilerOutput) {
+    pub fn extend(&mut self, settings: crate::artifacts::Settings, version: Version, output: CompilerOutput) {
         let CompilerOutput { errors, sources, contracts } = output;
         self.errors.extend(errors);
 
         for (path, source_file) in sources {
             let sources = self.sources.as_mut().entry(path).or_default();
-            sources.push(VersionedSourceFile { source_file, version: version.clone() });
+            sources.push(VersionedSourceFile { source_file, version: version.clone(), settings: settings.clone() });
         }
 
         for (file_name, new_contracts) in contracts {
             let contracts = self.contracts.as_mut().entry(file_name).or_default();
             for (contract_name, contract) in new_contracts {
                 let versioned = contracts.entry(contract_name).or_default();
-                versioned.push(VersionedContract { contract, version: version.clone() });
+                versioned.push(VersionedContract { contract, version: version.clone(), settings: settings.clone() });
             }
         }
     }

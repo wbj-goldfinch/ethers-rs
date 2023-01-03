@@ -1,10 +1,10 @@
 use crate::{
     artifacts::{
         contract::{CompactContractRef, Contract},
-        CompactContractBytecode, FileToContractsMap,
+        CompactContractBytecode, FileToContractsMap, Settings,
     },
     files::{MappedArtifactFile, MappedArtifactFiles, MappedContract},
-    ArtifactId, ArtifactOutput, OutputContext,
+    ArtifactId, ArtifactOutput, OutputContext, cache::CompilationUnitId,
 };
 use semver::Version;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -62,13 +62,14 @@ impl VersionedContracts {
                     // we reuse the path, this will make sure that even if there are conflicting
                     // files (files for witch `T::output_file()` would return the same path) we use
                     // consistent output paths
+                    let unit_id = CompilationUnitId::new(&contract.version, &contract.settings.clone().into());
                     let artifact_path = if let Some(existing_artifact) =
-                        ctx.existing_artifact(file, name, &contract.version).cloned()
+                        ctx.existing_artifact(file, name, &unit_id).cloned()
                     {
                         trace!("use existing artifact file {:?}", existing_artifact,);
                         existing_artifact
                     } else if versioned_contracts.len() > 1 {
-                        T::output_file_versioned(file, name, &contract.version)
+                        T::output_file_versioned(file, name, &unit_id)
                     } else {
                         T::output_file(file, name)
                     };
@@ -348,6 +349,7 @@ impl IntoIterator for VersionedContracts {
 pub struct VersionedContract {
     pub contract: Contract,
     pub version: Version,
+    pub settings: Settings,
 }
 
 /// A mapping of `ArtifactId` and their `CompactContractBytecode`

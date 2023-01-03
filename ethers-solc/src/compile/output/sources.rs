@@ -1,4 +1,4 @@
-use crate::SourceFile;
+use crate::{SourceFile, artifacts::Settings};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
@@ -293,4 +293,5 @@ impl IntoIterator for VersionedSourceFiles {
 pub struct VersionedSourceFile {
     pub source_file: SourceFile,
     pub version: Version,
+    pub settings: Settings,
 }

@@ -105,7 +105,7 @@ use crate::{
     artifact_output::Artifacts,
     artifacts::{Settings, VersionedFilteredSources, VersionedSources},
     buildinfo::RawBuildInfo,
-    cache::ArtifactsCache,
+    cache::{ArtifactsCache, CompilationUnit},
     error::Result,
     filter::SparseOutputFilter,
     output::AggregatedCompilerOutput,
@@ -115,7 +115,7 @@ use crate::{
     Sources,
 };
 use rayon::prelude::*;
-use std::{collections::btree_map::BTreeMap, path::PathBuf, time::Instant};
+use std::{collections::{btree_map::BTreeMap, BTreeSet}, path::PathBuf, time::Instant};
 use tracing::trace;
 
 #[derive(Debug)]
@@ -186,7 +186,9 @@ impl<'a, T: ArtifactOutput> ProjectCompiler<'a, T> {
             edges.include_paths().clone(),
         );
 
-        let sources_by_version = BTreeMap::from([(solc, (version, sources))]);
+        let compilation_unit = CompilationUnit { solc_config: project.solc_config.clone(), version, source_units: BTreeSet::new() };
+
+        let sources_by_version = BTreeMap::from([(solc, (compilation_unit, sources))]);
         let sources = CompilerSources::Sequential(sources_by_version);
 
         Ok(Self { edges, project, sources, sparse_output: Default::default() })
@@ -419,21 +421,22 @@ impl CompilerSources {
             cache: &mut ArtifactsCache<T>,
         ) -> VersionedFilteredSources {
             // fill all content hashes first so they're available for all source sets
-            sources.iter().for_each(|(_, (_, sources))| {
+            sources.iter().for_each(|(_, (unit, sources))| {
                 cache.fill_content_hashes(sources);
+                cache.fill_compilation_unit(unit);
             });
 
             sources
                 .into_iter()
-                .map(|(solc, (version, sources))| {
-                    trace!("Filtering {} sources for {}", sources.len(), version);
-                    let sources = cache.filter(sources, &version);
+                .map(|(solc, (compilation_unit, sources))| {
+                    trace!("Filtering {} sources for {}", sources.len(), compilation_unit.id());
+                    let sources = cache.filter(sources, &compilation_unit.id());
                     trace!(
                         "Detected {} dirty sources {:?}",
                         sources.dirty().count(),
                         sources.dirty_files().collect::<Vec<_>>()
                     );
-                    (solc, (version, sources))
+                    (solc, (compilation_unit, sources))
                 })
                 .collect()
         }
@@ -500,10 +503,10 @@ fn compile_sequential(
 ) -> Result<AggregatedCompilerOutput> {
     let mut aggregated = AggregatedCompilerOutput::default();
     trace!("compiling {} jobs sequentially", input.len());
-    for (solc, (version, filtered_sources)) in input {
+    for (solc, (CompilationUnit { ref version, ..}, filtered_sources)) in input {
         if filtered_sources.is_empty() {
             // nothing to compile
-            trace!("skip solc {} {} for empty sources set", solc.as_ref().display(), version);
+            // trace!("skip solc {} for empty sources set", solc.as_ref().display(), version.clone());
             continue
         }
         trace!(
@@ -531,19 +534,19 @@ fn compile_sequential(
                 // nothing to compile for this particular language, all dirty files are in the other
                 // language set
                 trace!(
-                    "skip solc {} {} compilation of {} compiler input due to empty source set",
+                    "skip solc {} compilation of {} compiler input due to empty source set",
                     solc.as_ref().display(),
-                    version,
+                    // version.clone(),
                     input.language
                 );
                 continue
             }
             let input = input
                 .settings(opt_settings.clone())
-                .normalize_evm_version(&version)
+                .normalize_evm_version(&version.clone())
                 .with_remappings(paths.remappings.clone())
                 .with_base_path(&paths.root)
-                .sanitized(&version);
+                .sanitized(&version.clone());
 
             trace!(
                 "calling solc `{}` with {} sources {:?}",
@@ -565,7 +568,7 @@ fn compile_sequential(
                 aggregated.build_infos.insert(version.clone(), build_info);
             }
 
-            aggregated.extend(version.clone(), output);
+            aggregated.extend(input.settings, version.clone(), output);
         }
     }
     Ok(aggregated)
@@ -585,7 +588,7 @@ fn compile_parallel(
     trace!("compile {} sources in parallel using up to {} solc jobs", input.len(), num_jobs);
 
     let mut jobs = Vec::with_capacity(input.len());
-    for (solc, (version, filtered_sources)) in input {
+    for (solc, (CompilationUnit { version, ..}, filtered_sources)) in input {
         if filtered_sources.is_empty() {
             // nothing to compile
             trace!("skip solc {} {} for empty sources set", solc.as_ref().display(), version);
@@ -667,7 +670,7 @@ fn compile_parallel(
             let build_info = RawBuildInfo::new(&input, &output, &version)?;
             aggregated.build_infos.insert(version.clone(), build_info);
         }
-        aggregated.extend(version, output);
+        aggregated.extend(input.settings,version, output);
     }
 
     Ok(aggregated)

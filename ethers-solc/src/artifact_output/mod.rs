@@ -10,7 +10,7 @@ use crate::{
     error::Result,
     sourcemap::{SourceMap, SyntaxError},
     sources::VersionedSourceFile,
-    utils, HardhatArtifact, ProjectPathsConfig, SolFilesCache, SolcError, SolcIoError,
+    utils, HardhatArtifact, ProjectPathsConfig, SolFilesCache, SolcError, SolcIoError, cache::CompilationUnitId, SolcConfig,
 };
 use ethers_core::{abi::Abi, types::Bytes};
 use semver::Version;
@@ -42,7 +42,7 @@ pub struct ArtifactId {
     /// Original source file path
     pub source: PathBuf,
     /// `solc` version that produced this artifact
-    pub version: Version,
+    pub compilation_unit_id: CompilationUnitId,
 }
 
 impl ArtifactId {
@@ -78,11 +78,9 @@ impl ArtifactId {
     /// Returns a `<filename><version>:<name>` slug that identifies an artifact
     pub fn slug_versioned(&self) -> String {
         format!(
-            "{}.{}.{}.{}.json:{}",
+            "{}.{}.json:{}",
             self.path.file_stem().unwrap().to_string_lossy(),
-            self.version.major,
-            self.version.minor,
-            self.version.patch,
+            self.compilation_unit_id,
             self.name
         )
     }
@@ -95,14 +93,14 @@ pub struct ArtifactFile<T> {
     pub artifact: T,
     /// path to the file where the `artifact` was written to
     pub file: PathBuf,
-    /// `solc` version that produced this artifact
-    pub version: Version,
+    
+    pub compilation_unit_id: CompilationUnitId,
 }
 
 impl<T: Serialize> ArtifactFile<T> {
     /// Writes the given contract to the `out` path creating all parent directories
     pub fn write(&self) -> Result<()> {
-        trace!("writing artifact file {:?} {}", self.file, self.version);
+        trace!("writing artifact file {:?} {}", self.file, self.compilation_unit_id);
         utils::create_parent_dir_all(&self.file)?;
         fs::write(&self.file, serde_json::to_vec_pretty(&self.artifact)?)
             .map_err(|err| SolcError::io(err, &self.file))?;
@@ -235,11 +233,12 @@ impl<T> Artifacts<T> {
         file: &str,
         contract_name: &str,
         version: &Version,
+        solc_config: &SolcConfig,
     ) -> Option<&ArtifactFile<T>> {
         self.0
             .get(file)
             .and_then(|contracts| contracts.get(contract_name))
-            .and_then(|artifacts| artifacts.iter().find(|artifact| artifact.version == *version))
+            .and_then(|artifacts| artifacts.iter().find(|artifact| artifact.compilation_unit_id == CompilationUnitId::new(version, solc_config)))
     }
 
     /// Returns true if this type contains an artifact with the given path for the given contract
@@ -277,7 +276,7 @@ impl<T> Artifacts<T> {
                                 path: PathBuf::from(&artifact.file),
                                 name,
                                 source: source.clone(),
-                                version: artifact.version,
+                                compilation_unit_id: artifact.compilation_unit_id,
                             }
                             .with_slashed_paths(),
                             artifact.artifact,
@@ -611,7 +610,7 @@ pub trait ArtifactOutput {
         for (file, contracts) in contracts.as_ref().iter() {
             for (name, versioned_contracts) in contracts {
                 for c in versioned_contracts {
-                    if let Some(artifact) = artifacts.find_artifact(file, name, &c.version) {
+                    if let Some(artifact) = artifacts.find_artifact(file, name, &c.version, &c.settings.clone().into()) {
                         let file = &artifact.file;
                         utils::create_parent_dir_all(file)?;
                         self.write_contract_extras(&c.contract, file)?;
@@ -631,8 +630,8 @@ pub trait ArtifactOutput {
 
     /// Returns the file name for the contract's artifact and the given version
     /// `Greeter.0.8.11.json`
-    fn output_file_name_versioned(name: impl AsRef<str>, version: &Version) -> PathBuf {
-        format!("{}.{}.{}.{}.json", name.as_ref(), version.major, version.minor, version.patch)
+    fn output_file_name_versioned(name: impl AsRef<str>, unit_id: &CompilationUnitId) -> PathBuf {
+        format!("{}.{}.json", name.as_ref(), unit_id)
             .into()
     }
 
@@ -726,15 +725,15 @@ pub trait ArtifactOutput {
     fn output_file_versioned(
         contract_file: impl AsRef<Path>,
         name: impl AsRef<str>,
-        version: &Version,
+        unit_id: &CompilationUnitId,
     ) -> PathBuf {
         let name = name.as_ref();
         contract_file
             .as_ref()
             .file_name()
             .map(Path::new)
-            .map(|p| p.join(Self::output_file_name_versioned(name, version)))
-            .unwrap_or_else(|| Self::output_file_name_versioned(name, version))
+            .map(|p| p.join(Self::output_file_name_versioned(name, unit_id)))
+            .unwrap_or_else(|| Self::output_file_name_versioned(name, unit_id))
     }
 
     /// The inverse of `contract_file_name`
@@ -862,7 +861,7 @@ pub trait ArtifactOutput {
                 let artifact = ArtifactFile {
                     artifact,
                     file: artifact_path,
-                    version: contract.version.clone(),
+                    compilation_unit_id: CompilationUnitId::new(&contract.version, &contract.settings.clone().into()),
                 };
 
                 artifacts
@@ -896,8 +895,9 @@ pub trait ArtifactOutput {
                         if let Some(artifact) =
                             self.standalone_source_file_to_artifact(file, source)
                         {
+                            let unit_id = CompilationUnitId::new(&source.version, &source.settings.clone().into());
                             let mut artifact_path = if sources.len() > 1 {
-                                Self::output_file_versioned(file, name, &source.version)
+                                Self::output_file_versioned(file, name, &unit_id)
                             } else {
                                 Self::output_file(file, name)
                             };
@@ -919,11 +919,11 @@ pub trait ArtifactOutput {
                                 .entry(name.to_string())
                                 .or_default();
 
-                            if entries.iter().all(|entry| entry.version != source.version) {
+                            if entries.iter().all(|entry| entry.compilation_unit_id != unit_id ) {
                                 entries.push(ArtifactFile {
                                     artifact,
                                     file: artifact_path,
-                                    version: source.version.clone(),
+                                    compilation_unit_id: unit_id,
                                 });
                             }
                         }
@@ -985,9 +985,9 @@ impl<'a> OutputContext<'a> {
         &self,
         file: impl AsRef<Path>,
         contract: &str,
-        version: &Version,
+        unit_id: &CompilationUnitId,
     ) -> Option<&PathBuf> {
-        self.cache.entry(file)?.find_artifact(contract, version)
+        self.cache.entry(file)?.find_artifact(contract, unit_id)
     }
 }
 

@@ -46,12 +46,12 @@
 //! [version pragma](https://docs.soliditylang.org/en/develop/layout-of-source-files.html#version-pragma),
 //! which is defined on a per source file basis.
 
-use crate::{error::Result, utils, IncludePaths, ProjectPathsConfig, SolcError, Source, Sources};
+use crate::{error::Result, utils, IncludePaths, ProjectPathsConfig, SolcError, Source, Sources, cache::CompilationUnit};
 use parse::{SolData, SolDataUnit, SolImport};
 use rayon::prelude::*;
 use semver::VersionReq;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque, BTreeSet},
     fmt, io,
     path::{Path, PathBuf},
 };
@@ -765,7 +765,7 @@ impl VersionedSources {
     pub fn get<T: crate::ArtifactOutput>(
         self,
         project: &crate::Project<T>,
-    ) -> Result<std::collections::BTreeMap<crate::Solc, (semver::Version, Sources)>> {
+    ) -> Result<std::collections::BTreeMap<crate::Solc, (CompilationUnit, Sources)>> {
         use crate::Solc;
         // we take the installer lock here to ensure installation checking is done in sync
         #[cfg(any(test, feature = "tests"))]
@@ -811,7 +811,11 @@ impl VersionedSources {
                 Some(version.clone()),
                 self.resolved_solc_include_paths.clone(),
             );
-            sources_by_version.insert(solc, (version, sources));
+
+            let compilation_unit = CompilationUnit { solc_config: project.solc_config.clone(), version, source_units: BTreeSet::new() };
+
+
+            sources_by_version.insert(solc, (compilation_unit, sources));
         }
         Ok(sources_by_version)
     }
