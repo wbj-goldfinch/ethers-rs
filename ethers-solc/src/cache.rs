@@ -368,13 +368,13 @@ impl SolFilesCache {
             if entry.artifacts.is_empty() {
                 // keep entries that didn't emit any artifacts in the first place, such as a
                 // solidity file that only includes error definitions
-                return true
+                return true;
             }
 
             if let Some(versions) = files.remove(file.as_path()) {
                 entry.retain_versions(versions);
             } else {
-                return false
+                return false;
             }
             !entry.artifacts.is_empty()
         });
@@ -552,7 +552,7 @@ impl CacheEntry {
     {
         let versions = versions.into_iter().collect::<HashSet<_>>();
         self.artifacts.retain(|_, artifacts| {
-            artifacts.retain(|version, _| versions.contains(version));
+            artifacts.retain(|version, _| true);
             !artifacts.is_empty()
         })
     }
@@ -780,8 +780,8 @@ impl<'a, T: ArtifactOutput> ArtifactsCacheInner<'a, T> {
         version: &Version,
     ) -> FilteredSourceInfo {
         let idx = self.edges.node_id(&file);
-        if !self.is_dirty(&file, version) &&
-            self.edges.imports(&file).iter().all(|file| !self.is_dirty(file, version))
+        if !self.is_dirty(&file, version)
+            && self.edges.imports(&file).iter().all(|file| !self.is_dirty(file, version))
         {
             FilteredSourceInfo { file, source, idx, dirty: false }
         } else {
@@ -795,7 +795,7 @@ impl<'a, T: ArtifactOutput> ArtifactsCacheInner<'a, T> {
             if let Some(entry) = self.cache.entry(file) {
                 if entry.content_hash.as_bytes() != hash.as_bytes() {
                     tracing::trace!("changed content hash for source file \"{}\"", file.display());
-                    return true
+                    return true;
                 }
                 if let Some(compilation_unit) =
                     self.cache.compilation_units.get(&entry.compilation_unit)
@@ -805,7 +805,7 @@ impl<'a, T: ArtifactOutput> ArtifactsCacheInner<'a, T> {
                             "changed solc config for source file \"{}\"",
                             file.display()
                         );
-                        return true
+                        return true;
                     }
                 }
 
@@ -813,14 +813,14 @@ impl<'a, T: ArtifactOutput> ArtifactsCacheInner<'a, T> {
                 // e.g. a solidity file consisting only of import statements (like interfaces that
                 // re-export) do not create artifacts
                 if !entry.artifacts.is_empty() {
-                    if !entry.contains_version(version) {
-                        tracing::trace!(
-                            "missing linked artifacts for source file `{}` for version \"{}\"",
-                            file.display(),
-                            version
-                        );
-                        return true
-                    }
+                    // if !entry.contains_version(version) {
+                    //     tracing::trace!(
+                    //         "missing linked artifacts for source file `{}` for version \"{}\"",
+                    //         file.display(),
+                    //         version
+                    //     );
+                    //     return true;
+                    // }
 
                     if entry.artifacts_for_version(version).any(|artifact_path| {
                         let missing_artifact = !self.cached_artifacts.has_artifact(artifact_path);
@@ -829,11 +829,11 @@ impl<'a, T: ArtifactOutput> ArtifactsCacheInner<'a, T> {
                         }
                         missing_artifact
                     }) {
-                        return true
+                        return true;
                     }
                 }
                 // all things match, can be reused
-                return false
+                return false;
             }
             tracing::trace!("Missing cache entry for {}", file.display());
         } else {
@@ -878,7 +878,7 @@ impl<'a, T: ArtifactOutput> ArtifactsCache<'a, T> {
                 if let Ok(cache) = SolFilesCache::read_joined(&project.paths) {
                     if cache.paths == paths {
                         // unchanged project paths
-                        return cache
+                        return cache;
                     }
                 }
             }
@@ -999,6 +999,8 @@ impl<'a, T: ArtifactOutput> ArtifactsCache<'a, T> {
                     ..
                 } = cache;
 
+                // dbg!(filtered.values().collect::<Vec<_>>());
+
                 // keep only those files that were previously filtered (not dirty, reused)
                 cache.retain(filtered.iter().map(|(p, (_, v))| (p.as_path(), v)));
 
@@ -1014,7 +1016,7 @@ impl<'a, T: ArtifactOutput> ArtifactsCache<'a, T> {
                             |(name, artifacts)| {
                                 let artifacts = artifacts
                                     .iter()
-                                    .filter(|artifact| versions.contains(&artifact.version))
+                                    // .filter(|artifact| versions.contains(&artifact.version))
                                     .collect::<Vec<_>>();
                                 (name, artifacts)
                             },
@@ -1030,23 +1032,24 @@ impl<'a, T: ArtifactOutput> ArtifactsCache<'a, T> {
                                 // written artifact clashes with a cached artifact, so we need to decide whether to keep or to remove the cached
                                 cached_artifacts.retain(|f| {
                                     // we only keep those artifacts that don't conflict with written artifacts and which version was a compiler target
-                                    let retain = written_files
-                                        .iter()
-                                        .all(|other| other.version != f.version) && filtered.get(
-                                        &PathBuf::from(file)).map(|(_, versions)| {
-                                            versions.contains(&f.version)
-                                        }).unwrap_or_default();
-                                    if !retain {
-                                        tracing::trace!(
-                                            "purging obsolete cached artifact {:?} for contract {} and version {}",
-                                            f.file,
-                                            name,
-                                            f.version
-                                        );
-                                    }
-                                    retain
+                                    // let retain = written_files
+                                    //     .iter()
+                                    //     .all(|other| other.version != f.version) && filtered.get(
+                                    //     &PathBuf::from(file)).map(|(_, versions)| {
+                                    //         versions.contains(&f.version)
+                                    //     }).unwrap_or_default();
+                                    // if !retain {
+                                    //     tracing::trace!(
+                                    //         "purging obsolete cached artifact {:?} for contract {} and version {}",
+                                    //         f.file,
+                                    //         name,
+                                    //         f.version
+                                    //     );
+                                    // }
+                                    // retain
+                                    true
                                 });
-                                return !cached_artifacts.is_empty()
+                                return !cached_artifacts.is_empty();
                             }
                             false
                         });

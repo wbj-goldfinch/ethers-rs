@@ -536,7 +536,7 @@ impl Libraries {
             if items.next().is_some() {
                 return Err(SolcError::msg(format!(
                     "failed to parse, too many arguments passed: {lib}"
-                )))
+                )));
             }
             libraries
                 .entry(file.into())
@@ -677,7 +677,9 @@ pub struct YulDetails {
     pub optimizer_steps: Option<String>,
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash,
+)]
 pub enum EvmVersion {
     Homestead,
     TangerineWhistle,
@@ -781,7 +783,9 @@ pub struct DebuggingSettings {
 }
 
 /// How to treat revert (and require) reason strings.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash,
+)]
 pub enum RevertStrings {
     /// "default" does not inject compiler-generated revert strings and keeps user-supplied ones.
     #[default]
@@ -823,7 +827,7 @@ impl FromStr for RevertStrings {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct SettingsMetadata {
     /// Use only literal content and not URLs (false by default)
     #[serde(default, rename = "useLiteralContent", skip_serializing_if = "Option::is_none")]
@@ -858,7 +862,7 @@ impl From<BytecodeHash> for SettingsMetadata {
 /// Determines the hash method for the metadata hash that is appended to the bytecode.
 ///
 /// Solc's default is `Ipfs`, see <https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-api>.
-#[derive(Clone, Debug, Default, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum BytecodeHash {
     #[default]
     Ipfs,
@@ -1021,7 +1025,7 @@ pub struct ModelCheckerSettings {
 }
 
 /// Which model checker engine to run.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum ModelCheckerEngine {
     #[default]
     Default,
@@ -1829,7 +1833,7 @@ impl SourceFile {
     pub fn contains_contract_definition(&self) -> bool {
         if let Some(ref ast) = self.ast {
             // contract definitions are only allowed at the source-unit level <https://docs.soliditylang.org/en/latest/grammar.html>
-            return ast.nodes.iter().any(|node| node.node_type == NodeType::ContractDefinition)
+            return ast.nodes.iter().any(|node| node.node_type == NodeType::ContractDefinition);
             // abstract contract, interfaces: ContractDefinition
         }
 
